@@ -1,12 +1,13 @@
 # Higher/Lower
 
-A soft, fast ear-training game: listen to a fixed 440 Hz reference tone, then decide whether the second tone is higher or lower.
+A soft ear-training game. Listen to a fixed 440 Hz reference tone, then decide whether the second tone is higher or lower.
 
-The test adapts after every answer, keeps going until five mistakes, and reports how close you got in cents. It can run locally as a static web app, and it is ready to connect to Supabase for shared player results.
+Play it here:
+[https://dadkim0209.github.io/higher-lower/](https://dadkim0209.github.io/higher-lower/)
 
-## Run Locally
+The test adapts after every answer, runs until five mistakes, and reports how close you got in cents.
 
-Open `index.html` in a browser, or serve the folder with a local static server:
+## Local
 
 ```sh
 python3 -m http.server 4173
@@ -14,6 +15,6 @@ python3 -m http.server 4173
 
 Then visit `http://localhost:4173`.
 
-## Shared Results
+## Data
 
-See `SUPABASE_SETUP.md` to connect a free Supabase project for global stats and submitted runs.
+The app works locally by default. To collect shared results, connect Supabase with `SUPABASE_SETUP.md`.
