@@ -48,6 +48,7 @@ const state = {
   autoPlayTimer: null,
   playerId: getPlayerId(),
   pendingRecord: null,
+  audioUnlocked: false,
 };
 
 function centsToRatio(cents) {
@@ -97,10 +98,39 @@ function setNameFormVisible(visible) {
 }
 
 function getAudio() {
-  if (!state.audio) {
-    state.audio = new AudioContext();
+  if (!state.audio || state.audio.state === "closed") {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    state.audio = new AudioContextClass();
   }
   return state.audio;
+}
+
+async function resumeAudio() {
+  const ctx = getAudio();
+  if (ctx.state !== "running") {
+    await ctx.resume();
+  }
+  return ctx;
+}
+
+async function unlockAudio() {
+  if (state.audioUnlocked) return;
+
+  try {
+    const ctx = await resumeAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime;
+
+    gain.gain.setValueAtTime(0.0001, start);
+    osc.frequency.setValueAtTime(REFERENCE_FREQUENCY, start);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.01);
+    state.audioUnlocked = true;
+  } catch (error) {
+    console.warn("Audio unlock failed", error);
+  }
 }
 
 function scheduleTone(ctx, frequency, startTime, dotIndex) {
@@ -156,8 +186,25 @@ async function playTrial() {
   if (!state.trial) makeTrial();
   clearAutoPlay();
 
-  const ctx = getAudio();
-  await ctx.resume();
+  let ctx;
+  try {
+    ctx = await resumeAudio();
+  } catch (error) {
+    console.warn("Audio resume failed", error);
+    els.stageCopy.textContent = "Tap play again to enable sound.";
+    els.play.disabled = false;
+    setAnswerEnabled(false);
+    return;
+  }
+
+  if (ctx.state !== "running") {
+    els.stageCopy.textContent = "Tap play again to enable sound.";
+    els.play.disabled = false;
+    setAnswerEnabled(false);
+    return;
+  }
+
+  state.audioUnlocked = true;
   state.playing = true;
   els.play.disabled = true;
   setAnswerEnabled(false);
@@ -336,6 +383,7 @@ function getDeviceType() {
 async function submitResult(record, displayName) {
   if (!isSupabaseConfigured()) return;
   setSyncStatus("Saving", "");
+  els.submitScore.disabled = true;
 
   const payload = {
     player_id: state.playerId,
@@ -375,6 +423,7 @@ async function submitResult(record, displayName) {
   } catch (error) {
     console.warn(error);
     setSyncStatus("Save failed", "error");
+    els.submitScore.disabled = false;
   }
 }
 
@@ -443,6 +492,7 @@ function handleNameSubmit(event) {
   }
 
   localStorage.setItem("higher-lower-display-name", displayName);
+  els.playerName.blur();
   submitResult(state.pendingRecord, displayName);
 }
 
@@ -490,6 +540,8 @@ els.lower.addEventListener("click", () => answer("lower"));
 els.higher.addEventListener("click", () => answer("higher"));
 els.nameForm.addEventListener("submit", handleNameSubmit);
 document.addEventListener("keydown", handleShortcut);
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+document.addEventListener("touchend", unlockAudio, { once: true });
 els.theme.addEventListener("click", () => {
   document.body.classList.toggle("dark");
   localStorage.setItem("pitchline-theme", document.body.classList.contains("dark") ? "dark" : "light");
