@@ -19,6 +19,10 @@ create table if not exists public.pitch_results (
 
 alter table public.pitch_results enable row level security;
 
+grant usage on schema public to anon;
+grant select, insert on public.pitch_results to anon;
+grant usage, select on sequence public.pitch_results_id_seq to anon;
+
 drop policy if exists "Anyone can submit pitch results" on public.pitch_results;
 create policy "Anyone can submit pitch results"
 on public.pitch_results
