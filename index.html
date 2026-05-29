@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f6f2ea" />
     <title>Higher/Lower</title>
-    <link rel="stylesheet" href="styles.css?v=mobile-title-1" />
+    <link rel="stylesheet" href="styles.css?v=name-submit-1" />
   </head>
   <body>
     <main class="shell">
@@ -104,6 +104,13 @@
               <dd id="accuracy-detail">--</dd>
             </div>
           </dl>
+          <form class="name-form" id="name-form" hidden>
+            <label for="player-name">Name for the leaderboard</label>
+            <div>
+              <input id="player-name" name="player-name" maxlength="24" autocomplete="nickname" placeholder="Your name" />
+              <button class="primary" id="submit-score" type="submit">Submit</button>
+            </div>
+          </form>
         </div>
 
         <div>
@@ -160,6 +167,10 @@
             <div>
               <dt>Best threshold</dt>
               <dd id="global-best">--</dd>
+            </div>
+            <div>
+              <dt>Best player</dt>
+              <dd id="global-best-name">--</dd>
             </div>
             <div>
               <dt>Typical threshold</dt>

@@ -11,11 +11,15 @@ create table if not exists public.pitch_results (
   accuracy integer not null check (accuracy >= 0 and accuracy <= 100),
   percentile integer not null check (percentile >= 0 and percentile <= 100),
   band text not null,
+  display_name text check (display_name is null or char_length(display_name) between 1 and 24),
   tone_type text not null,
   device_type text not null check (device_type in ('mobile', 'desktop')),
   viewport_width integer,
   viewport_height integer
 );
+
+alter table public.pitch_results
+add column if not exists display_name text check (display_name is null or char_length(display_name) between 1 and 24);
 
 alter table public.pitch_results enable row level security;
 

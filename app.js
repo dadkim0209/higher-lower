@@ -18,7 +18,11 @@ const els = {
   syncStatus: document.querySelector("#sync-status"),
   globalRuns: document.querySelector("#global-runs"),
   globalBest: document.querySelector("#global-best"),
+  globalBestName: document.querySelector("#global-best-name"),
   globalTypical: document.querySelector("#global-typical"),
+  nameForm: document.querySelector("#name-form"),
+  playerName: document.querySelector("#player-name"),
+  submitScore: document.querySelector("#submit-score"),
   toneType: document.querySelector("#tone-type"),
   theme: document.querySelector("#theme-toggle"),
   dots: [document.querySelector("#dot-one"), document.querySelector("#dot-two")],
@@ -43,6 +47,7 @@ const state = {
   finished: false,
   autoPlayTimer: null,
   playerId: getPlayerId(),
+  pendingRecord: null,
 };
 
 function centsToRatio(cents) {
@@ -80,6 +85,15 @@ function supabaseEndpoint(path, query = "") {
 function setSyncStatus(text, mode = "") {
   els.syncStatus.textContent = text;
   els.syncStatus.className = mode;
+}
+
+function sanitizeName(name) {
+  return name.trim().replace(/\s+/g, " ").slice(0, 24);
+}
+
+function setNameFormVisible(visible) {
+  els.nameForm.hidden = !visible;
+  els.submitScore.disabled = !visible;
 }
 
 function getAudio() {
@@ -188,12 +202,15 @@ function resetRun() {
   state.lastDirection = null;
   state.answeredGaps = [];
   state.finished = false;
+  state.pendingRecord = null;
   els.threshold.textContent = "Not enough data";
   els.resultBand.textContent = "No run yet";
   els.percentile.textContent = "Finish a run to see how fine your ear is.";
   els.closestCorrect.textContent = "--";
   els.finalGap.textContent = "--";
   els.accuracyDetail.textContent = "--";
+  els.playerName.value = localStorage.getItem("higher-lower-display-name") || "";
+  setNameFormVisible(false);
   els.meterFill.style.width = "0";
   els.stageCopy.textContent = "Press play, listen to the 440 Hz reference, then choose whether the second tone is higher or lower.";
   updateDisplay();
@@ -307,15 +324,16 @@ function finishRun() {
   els.meterFill.style.width = `${percentile}%`;
   els.stageCopy.textContent = "Five mistakes reached. Press play to start a new run.";
   state.finished = true;
+  state.pendingRecord = record;
+  setNameFormVisible(true);
   renderHistory();
-  submitResult(record);
 }
 
 function getDeviceType() {
   return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 720 ? "mobile" : "desktop";
 }
 
-async function submitResult(record) {
+async function submitResult(record, displayName) {
   if (!isSupabaseConfigured()) return;
   setSyncStatus("Saving", "");
 
@@ -330,6 +348,7 @@ async function submitResult(record) {
     accuracy: record.accuracy,
     percentile: record.percentile,
     band: record.band,
+    display_name: displayName,
     tone_type: els.toneType.value,
     device_type: getDeviceType(),
     viewport_width: window.innerWidth,
@@ -350,6 +369,8 @@ async function submitResult(record) {
 
     if (!response.ok) throw new Error(`Supabase insert failed: ${response.status}`);
     setSyncStatus("Saved", "online");
+    setNameFormVisible(false);
+    state.pendingRecord = null;
     loadGlobalStats();
   } catch (error) {
     console.warn(error);
@@ -364,8 +385,8 @@ async function loadGlobalStats() {
   }
 
   try {
-    const response = await fetch(
-      supabaseEndpoint("pitch_results", "?select=threshold_cents&order=threshold_cents.asc&limit=5000"),
+    let response = await fetch(
+      supabaseEndpoint("pitch_results", "?select=threshold_cents,display_name&order=threshold_cents.asc&limit=5000"),
       {
         headers: {
           apikey: supabaseConfig.anonKey,
@@ -374,6 +395,15 @@ async function loadGlobalStats() {
       },
     );
 
+    if (response.status === 400) {
+      response = await fetch(supabaseEndpoint("pitch_results", "?select=threshold_cents&order=threshold_cents.asc&limit=5000"), {
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        },
+      });
+    }
+
     if (!response.ok) throw new Error(`Supabase select failed: ${response.status}`);
     const rows = await response.json();
     const thresholds = rows.map((row) => row.threshold_cents).filter(Number.isFinite);
@@ -381,6 +411,7 @@ async function loadGlobalStats() {
     if (!thresholds.length) {
       els.globalRuns.textContent = "0";
       els.globalBest.textContent = "--";
+      els.globalBestName.textContent = "--";
       els.globalTypical.textContent = "--";
       setSyncStatus("Connected", "online");
       return;
@@ -392,12 +423,27 @@ async function loadGlobalStats() {
 
     els.globalRuns.textContent = `${thresholds.length}`;
     els.globalBest.textContent = formatCents(thresholds[0]);
+    els.globalBestName.textContent = rows[0]?.display_name || "Anonymous";
     els.globalTypical.textContent = formatCents(typical);
     setSyncStatus("Connected", "online");
   } catch (error) {
     console.warn(error);
     setSyncStatus("Offline", "error");
   }
+}
+
+function handleNameSubmit(event) {
+  event.preventDefault();
+  if (!state.pendingRecord) return;
+
+  const displayName = sanitizeName(els.playerName.value);
+  if (!displayName) {
+    els.playerName.focus();
+    return;
+  }
+
+  localStorage.setItem("higher-lower-display-name", displayName);
+  submitResult(state.pendingRecord, displayName);
 }
 
 function renderHistory() {
@@ -442,6 +488,7 @@ function handleShortcut(event) {
 els.play.addEventListener("click", playTrial);
 els.lower.addEventListener("click", () => answer("lower"));
 els.higher.addEventListener("click", () => answer("higher"));
+els.nameForm.addEventListener("submit", handleNameSubmit);
 document.addEventListener("keydown", handleShortcut);
 els.theme.addEventListener("click", () => {
   document.body.classList.toggle("dark");
@@ -452,5 +499,6 @@ if (localStorage.getItem("pitchline-theme") === "dark") {
   document.body.classList.add("dark");
 }
 
+els.playerName.value = localStorage.getItem("higher-lower-display-name") || "";
 updateDisplay();
 loadGlobalStats();
