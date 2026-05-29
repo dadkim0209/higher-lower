@@ -1,4 +1,5 @@
 const els = {
+  themeColor: document.querySelector("meta[name='theme-color']"),
   play: document.querySelector("#play-button"),
   lower: document.querySelector("#lower-button"),
   higher: document.querySelector("#higher-button"),
@@ -97,6 +98,19 @@ function setNameFormVisible(visible) {
   els.submitScore.disabled = !visible;
 }
 
+function getTonePeakGain() {
+  switch (els.toneType.value) {
+    case "sine":
+      return 0.34;
+    case "triangle":
+      return 0.28;
+    case "square":
+      return 0.16;
+    default:
+      return 0.24;
+  }
+}
+
 function getAudio() {
   if (!state.audio || state.audio.state === "closed") {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -136,12 +150,13 @@ async function unlockAudio() {
 function scheduleTone(ctx, frequency, startTime, dotIndex) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
+  const peakGain = getTonePeakGain();
   osc.type = els.toneType.value;
   osc.frequency.value = frequency;
 
   gain.gain.setValueAtTime(0.0001, startTime);
-  gain.gain.exponentialRampToValueAtTime(0.18, startTime + 0.035);
-  gain.gain.setValueAtTime(0.18, startTime + 0.34);
+  gain.gain.exponentialRampToValueAtTime(peakGain, startTime + 0.035);
+  gain.gain.setValueAtTime(peakGain, startTime + 0.34);
   gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.43);
 
   osc.connect(gain).connect(ctx.destination);
@@ -535,6 +550,14 @@ function handleShortcut(event) {
   }
 }
 
+function applyThemePreference() {
+  const savedTheme = localStorage.getItem("pitchline-theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const useDark = savedTheme ? savedTheme === "dark" : prefersDark;
+  document.body.classList.toggle("dark", useDark);
+  els.themeColor.setAttribute("content", useDark ? "#171918" : "#f6f2ea");
+}
+
 els.play.addEventListener("click", playTrial);
 els.lower.addEventListener("click", () => answer("lower"));
 els.higher.addEventListener("click", () => answer("higher"));
@@ -546,10 +569,14 @@ els.theme.addEventListener("click", () => {
   document.body.classList.toggle("dark");
   localStorage.setItem("pitchline-theme", document.body.classList.contains("dark") ? "dark" : "light");
 });
-
-if (localStorage.getItem("pitchline-theme") === "dark") {
-  document.body.classList.add("dark");
+const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+if (colorSchemeQuery.addEventListener) {
+  colorSchemeQuery.addEventListener("change", applyThemePreference);
+} else {
+  colorSchemeQuery.addListener(applyThemePreference);
 }
+
+applyThemePreference();
 
 els.playerName.value = localStorage.getItem("higher-lower-display-name") || "";
 updateDisplay();
